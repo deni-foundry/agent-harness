@@ -15,6 +15,11 @@ hooks/           the scripts core/hooks.jsonc runs, one adapter folder per IDE
 test/            node --test suites for the hook scripts
 ```
 
+Stacks: `supabase` (patterns, hosted-database safety, MCP, troubleshooting), `github-actions`
+(CI and deploy pitfalls with Supabase and Cloudflare), `playwright`, `fast-check`,
+`framer-motion`, `react-vite` (lazy routes, caching, load and error states, the global Sass
+bundle, troubleshooting).
+
 ## Using it in a project
 
 1. Install a tag as a dev dependency, plus rulesync pinned to an exact version:
@@ -93,6 +98,22 @@ including a fresh worktree.
   HTML comments, so a comment banner never reaches the agent.
 - **Hooks**: only `core/hooks.jsonc`. A `hooks.jsonc` in any later input root replaces this
   one whole; MCP config, by contrast, merges across roots.
+
+## Model tuning
+
+The working-method rules differ by IDE because the models differ, not the projects:
+
+- `agent-method` — every IDE: evidence discipline, propose before implementing, layered
+  enforcement, API version checks, table formatting.
+- `agent-method-tuned` — Claude Code and Kiro, tuned for Opus 5.5 and Sonnet 5.5, which
+  self-verify and delegate unprompted: no explicit verification pass, capped delegation.
+  Effort per session: Opus 5.5 medium (high for spec design), Sonnet 5.5 medium or high,
+  xhigh or max only for security/RLS reviews and hard debugging. Sonnet 5.5 at low effort may
+  skip verification, which is why the end-of-turn review hook stays on.
+- `agent-method-checklists` — Cursor, which runs several models interchangeably, so it keeps
+  the explicit verification and quality checklists.
+- `workflow` (Claude Code, Cursor) and `workflow-kiro` (Kiro's spec types and task scheduler)
+  decide how much process a change gets.
 
 ## Hooks
 
