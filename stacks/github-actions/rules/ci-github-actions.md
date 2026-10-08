@@ -124,6 +124,16 @@ the dashboard, which CI never opens, and `studio` is the largest image to pull:
 
 ## Deploy pitfalls
 
+**Gate a deploy on CI by calling it, not by `workflow_run`.** Make the deploy a reusable
+workflow (`on: workflow_call`) and call it from the CI workflow's last job with `needs:` on every
+gating job and `secrets: inherit`, so a red CI never deploys. `workflow_run` looks simpler but
+runs on the default branch, so an environment whose branch policy allows only the deploy branch
+rejects it. Three consequences of calling instead: give the deploy workflow a literal
+`concurrency` group (inside a called workflow `github.workflow` is the caller's name, and sharing
+the caller's group deadlocks); stop CI from cancelling in-progress runs on the deploy branch, or a
+newer push cuts a deploy off mid-migration; and look up the deploy's runs and artifacts under the
+CI workflow, which now owns them.
+
 **Publish last.** Build the frontend bundle in parallel with the database deploy (pushing
 migrations and functions), and make the publish job `needs:` both, so the UI never reaches
 users before the schema it depends on while wall time stays at the slower of the two.
