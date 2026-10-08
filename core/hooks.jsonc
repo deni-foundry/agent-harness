@@ -1,0 +1,105 @@
+{
+  // Hooks for every project that uses the harness. Each IDE sends a different payload and
+  // expects a different reply, so every hook lives in its tool's block, pointing at that
+  // tool's adapter script. Projects must not add their own hooks.jsonc: rulesync replaces
+  // this whole file with it. Projects tune behaviour in `.rulesync/harness.json` instead.
+  //
+  // Claude Code paths use `${CLAUDE_PROJECT_DIR}`, which Claude substitutes itself, because
+  // rulesync leaves `./` inside `args` unanchored and Claude's cwd can be a subdirectory.
+  "version": 1,
+  "hooks": {},
+
+  "claudecode": {
+    "hooks": {
+      "preToolUse": [
+        {
+          "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+          "command": "node",
+          "args": ["${CLAUDE_PROJECT_DIR}/node_modules/@deni-foundry/agent-harness/hooks/edit-guard.mjs", "claude"],
+          "timeout": 10
+        },
+        {
+          "matcher": "Bash|PowerShell",
+          "command": "node",
+          "args": ["${CLAUDE_PROJECT_DIR}/node_modules/@deni-foundry/agent-harness/hooks/claude/record-changed-files.mjs"],
+          "timeout": 10
+        }
+      ],
+      "postToolUse": [
+        {
+          "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell",
+          "command": "node",
+          "args": ["${CLAUDE_PROJECT_DIR}/node_modules/@deni-foundry/agent-harness/hooks/claude/record-changed-files.mjs"],
+          "timeout": 10
+        }
+      ],
+      "postToolUseFailure": [
+        {
+          "matcher": "Bash|PowerShell",
+          "command": "node",
+          "args": ["${CLAUDE_PROJECT_DIR}/node_modules/@deni-foundry/agent-harness/hooks/claude/record-changed-files.mjs"],
+          "timeout": 10
+        }
+      ],
+      "stop": [
+        {
+          "command": "node",
+          "args": ["${CLAUDE_PROJECT_DIR}/node_modules/@deni-foundry/agent-harness/hooks/claude/end-of-turn-review.mjs"],
+          "timeout": 20
+        }
+      ]
+    }
+  },
+
+  "cursor": {
+    "hooks": {
+      "preToolUse": [
+        {
+          "matcher": "Write|Delete",
+          "command": "node ./node_modules/@deni-foundry/agent-harness/hooks/edit-guard.mjs cursor",
+          "timeout": 10
+        }
+      ],
+      "postToolUse": [
+        {
+          "matcher": "^(Write|Delete)$",
+          "command": "node ./node_modules/@deni-foundry/agent-harness/hooks/cursor/record-changed-files.mjs",
+          "timeout": 10
+        }
+      ],
+      "stop": [
+        {
+          "command": "node ./node_modules/@deni-foundry/agent-harness/hooks/cursor/end-of-turn-review.mjs",
+          "timeout": 10,
+          "loop_limit": 1
+        }
+      ]
+    }
+  },
+
+  "kiro": {
+    "hooks": {
+      "preToolUse": [
+        {
+          "matcher": "write",
+          "command": "node ./node_modules/@deni-foundry/agent-harness/hooks/edit-guard.mjs kiro",
+          "timeout": 10
+        }
+      ],
+      "stop": [
+        {
+          "command": "node ./node_modules/@deni-foundry/agent-harness/hooks/kiro/end-of-turn-review.mjs",
+          "timeout": 20
+        },
+        {
+          "command": "node ./node_modules/@deni-foundry/agent-harness/hooks/kiro/spec-alignment-check.mjs",
+          "timeout": 20
+        },
+        {
+          "command": "node ./node_modules/@deni-foundry/agent-harness/hooks/kiro/spec-gap-check.mjs",
+          "timeout": 20
+        }
+      ]
+    }
+  }
+}

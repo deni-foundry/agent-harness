@@ -1,0 +1,3 @@
+# rulesync copies these bytes into every project; LF keeps `rulesync generate --check`
+# from reporting CRLF checkouts as drift.
+* text=auto eol=lf
