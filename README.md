@@ -98,6 +98,11 @@ including a fresh worktree.
   HTML comments, so a comment banner never reaches the agent.
 - **Hooks**: only `core/hooks.jsonc`. A `hooks.jsonc` in any later input root replaces this
   one whole; MCP config, by contrast, merges across roots.
+- **MCP**: `core/mcp.jsonc` for servers every project gets, a stack's `mcp.jsonc` for servers
+  every project on that stack gets, and the project's `.rulesync/mcp.jsonc` for its own. A later
+  root's server with the same name replaces the earlier one; `{tool}.mcpServers.<name>: null`
+  drops a server for one IDE. Write tokens as `${VAR}` (rulesync writes `${env:VAR}` for Cursor)
+  and keep servers that need personal tokens in the user-level IDE configs.
 
 ## Model tuning
 

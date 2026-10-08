@@ -1,0 +1,52 @@
+{
+  // MCP servers every project gets. Never put secrets here: write `${VAR}` and set the variable in
+  // your user environment (rulesync writes it as `${env:VAR}` for Cursor). Personal servers that
+  // need your own accounts (Notion, GitHub, web search, memory) stay in your user-level IDE
+  // configs, because a project entry with the same name would shadow them.
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "autoApprove": ["query-docs"]
+    },
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "disabled": true,
+      "autoApprove": [
+        "take_snapshot",
+        "fill",
+        "click",
+        "take_screenshot",
+        "navigate_page",
+        "evaluate_script",
+        "list_pages",
+        "list_console_messages",
+        "fill_form",
+        "press_key",
+        "wait_for",
+        "emulate",
+        "select_page",
+        "resize_page",
+        "new_page",
+        "close_page"
+      ]
+    }
+  },
+
+  // Kiro installs Context7 as a user-level Power (`power-context7-context7`); a project entry
+  // would run it twice.
+  "kiro": {
+    "mcpServers": {
+      "context7": null
+    }
+  },
+
+  // Claude Code has no per-server off switch, so servers that are off by default are left out.
+  "claudecode": {
+    "mcpServers": {
+      "chrome-devtools": null
+    }
+  }
+}

@@ -11,10 +11,12 @@ targets: ["*"]
 ## Configured MCP Servers
 
 > **Servers get enabled and disabled per task**, so treat this as a list of what is *configured*,
-> not what is currently reachable. The IDE configs (`.mcp.json` for Claude Code,
-> `.cursor/mcp.json`, `.kiro/settings/mcp.json`) are generated from `.rulesync/mcp.jsonc`, and the
-> project's own MCP skill lists its servers and IDs. If a call fails because a server is
-> unavailable, say so and fall back — don't assume the doc is wrong.
+> not what is currently reachable. The project's IDE configs (`.mcp.json` for Claude Code,
+> `.cursor/mcp.json`, `.kiro/settings/mcp.json`) are generated from the agent-harness servers
+> (`core/mcp.jsonc` and each stack's `mcp.jsonc`) plus the project's `.rulesync/mcp.jsonc`, which
+> overrides them per server. Personal servers that need your own tokens live in the user-level IDE
+> configs instead. The project's own MCP skill lists its servers and IDs. If a call fails because
+> a server is unavailable, say so and fall back — don't assume the doc is wrong.
 
 ### Context7 - Library Documentation
 Use Context7 MCP to fetch up-to-date documentation for libraries and frameworks.

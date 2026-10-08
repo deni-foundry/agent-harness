@@ -165,11 +165,11 @@ GRANT ALL ON private.rate_limits TO service_role;
 
 ### Function Grant Pattern
 
-PostgreSQL grants `EXECUTE` to `PUBLIC` on all functions by default. For sensitive functions (e.g., those accessing admin tables), restrict access:
+PostgreSQL grants `EXECUTE` to `PUBLIC` on all functions by default, and Supabase's default privileges for `public` also grant it to `anon` and `authenticated` by name. Revoking only `PUBLIC` leaves the named grants (the function stays callable with the publishable key); revoking only the named roles leaves `PUBLIC`. Name all three. For sensitive functions (e.g., those accessing admin tables), restrict access:
 
 ```sql
 -- Restrict to service_role only
-REVOKE EXECUTE ON FUNCTION public.my_sensitive_function FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.my_sensitive_function FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.my_sensitive_function TO service_role;
 ```
 
@@ -293,7 +293,8 @@ service-role-only check: adding a credential nothing uses only enlarges the atta
 
 **A browser can never hold the service role key.** It bypasses RLS. So a function an admin
 must call directly needs the admin credential path — and the browser has to pass it explicitly,
-because `supabase.functions.invoke` defaults `Authorization` to the publishable key:
+because `supabase.functions.invoke` defaults `Authorization` to the signed-in user's access
+token, or to the publishable key when there is no session:
 
 ```typescript
 await supabase.functions.invoke('my-function', {
@@ -310,12 +311,12 @@ is overlooked.
 
 Edge Functions use Deno's `npm:` import specifier (e.g., `import { createClient } from 'npm:@supabase/supabase-js@2'`). Do NOT use `https://esm.sh/` URLs — they cause transient CDN failures (HTTP 522) during CI deployments.
 
-Vitest (Node.js) cannot resolve `npm:` specifiers natively. When adding or changing an `npm:` import in edge functions, ensure a matching resolve alias exists in `vite.config.ts` → `resolve.alias`:
+Vitest (Node.js) cannot resolve `npm:` specifiers natively. When adding or changing an `npm:` import in edge functions, ensure a matching resolve alias exists in `vite.config.ts` → `resolve.alias`. The alias key must equal the specifier exactly, version included (`...@2` does not match `...@2.x.y`), so pin one exact version of each package across every function and alias that spelling:
 ```typescript
 resolve: {
   alias: {
-    'npm:@supabase/supabase-js@2': '@supabase/supabase-js',
-    'npm:standardwebhooks@1': 'standardwebhooks',
+    'npm:@supabase/supabase-js@<version>': '@supabase/supabase-js',
+    'npm:standardwebhooks@<version>': 'standardwebhooks',
   },
 }
 ```
@@ -490,8 +491,8 @@ const subscription = supabase
   )
   .subscribe();
 
-// Cleanup
-subscription.unsubscribe();
+// Cleanup — removeChannel unsubscribes and drops the channel from the client
+supabase.removeChannel(subscription);
 ```
 
 ## Client-Side Write Boundaries
@@ -562,7 +563,7 @@ When creating or modifying a table's RLS policies, verify:
 1. **SELECT**: Scope to `auth.uid()` for user-owned data, or `true` only for genuinely public data (published items, public user pages)
 2. **INSERT**: Always include a `WITH CHECK` that validates ownership. Use `TO service_role` for tables that should only be written by Edge Functions (notifications, audit logs, matches)
 3. **UPDATE/DELETE**: Always include `USING` clause scoped to `auth.uid()` or org membership
-4. **Storage buckets**: INSERT policies must include folder-scoping (`auth.uid()::text = (storage.foldername(name))[1]`) to prevent cross-user uploads
+4. **Storage buckets**: INSERT policies must include folder-scoping on the bucket's owning unit — `auth.uid()::text = (storage.foldername(name))[1]` for per-user buckets, an org-membership check on that segment for org-owned ones (a per-user policy on an org-owned bucket locks out every teammate but the uploader)
 5. **Service-role-only tables**: Use `TO service_role` explicitly — don't rely on `WITH CHECK (true)` which allows any authenticated user
 
 **Common mistakes:**

@@ -76,6 +76,9 @@ Keep the set of top-level routes in one place, read by the page-transition compo
 The patterns below gate on a motion check, `animationsEnabled`: Framer Motion's `useReducedMotion()`,
 or the project's own hook when it also honours a user setting.
 
+They use the slim `m` component, which only animates inside a `LazyMotion` provider (with
+`strict`, a full `motion` component there throws). Without `LazyMotion`, write `motion.` instead.
+
 ### 1. Stagger a list
 ```tsx
 const animationsEnabled = useAnimationsEnabled(); // the project's motion gate
@@ -188,7 +191,9 @@ A page-transition wrapper in the layout can detect navigation direction automati
 - **POP** (back navigation, e.g., detail → list): content slides in from left
 - **REPLACE** or first load: neutral fade + 8px y-shift
 
-No per-page configuration needed — it reads `useNavigationType()` from React Router.
+No per-page configuration needed — it reads `useNavigationType()` from React Router. That hook
+reports `POP` on the first load too, so track first render separately or the first page slides
+in as if going back.
 
 ## Best Practices
 

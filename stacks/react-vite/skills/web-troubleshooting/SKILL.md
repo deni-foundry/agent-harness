@@ -16,6 +16,11 @@ targets: ["*"]
 npx tsc --noEmit
 ```
 
+If the root `tsconfig.json` is only a `references` hub (`"files": []`, as the Vite `react-ts`
+template scaffolds it), `tsc --noEmit` on it checks nothing; run `npx tsc -b` instead. A repo
+with several configs (e2e, workers) needs each one checked — look for `typecheck*` scripts in
+`package.json`.
+
 ### Vite Build Failures
 ```bash
 # Clear cache and rebuild
@@ -45,6 +50,10 @@ try { <the types check command> } finally { Move-Item $bak .dev.vars -Force }
 Passing any `--env-file` also makes the check pass with `.dev.vars` in place, but why is
 not understood — pointing `--env-file` at `.dev.vars` itself still reports up to date —
 so do not build that into the gate.
+
+The durable fix is in the config: keep every var that `.dev.vars` overrides at the end of
+each `vars` block, in the same order as `.dev.vars`. Both orderings then agree and the check
+passes locally with `.dev.vars` in place.
 
 Regenerate **only** when you changed the wrangler config bindings or vars, and then do it
 with `.dev.vars` moved aside. Any script that rewrites this file as a side effect has the

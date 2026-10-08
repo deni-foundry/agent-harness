@@ -1,0 +1,55 @@
+{
+  // Local and hosted Supabase MCP. The local URL assumes the default API port 54321; a project on
+  // another port overrides `supabase-local` (and Kiro's `power-supabase-local-supabase`) in its
+  // own mcp.jsonc. Hosted auto-approval is limited to read-only tools: `execute_sql` can write,
+  // and hosted databases are read-only without the user's confirmation.
+  "mcpServers": {
+    "supabase-local": {
+      "type": "http",
+      "url": "http://127.0.0.1:54321/mcp",
+      "autoApprove": ["execute_sql", "search_docs"]
+    },
+    "supabase-hosted": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp",
+      "autoApprove": [
+        "list_projects",
+        "list_branches",
+        "list_tables",
+        "list_migrations",
+        "list_edge_functions",
+        "get_edge_function",
+        "get_logs",
+        "get_publishable_keys"
+      ]
+    }
+  },
+
+  // Kiro's Supabase Power owns these servers under its own names; keeping those names stops Kiro
+  // from treating the Power as uninstalled.
+  "kiro": {
+    "mcpServers": {
+      "supabase-local": null,
+      "supabase-hosted": null,
+      "power-supabase-local-supabase": {
+        "type": "http",
+        "url": "http://127.0.0.1:54321/mcp",
+        "autoApprove": ["execute_sql", "search_docs"]
+      },
+      "power-supabase-hosted-supabase": {
+        "type": "http",
+        "url": "https://mcp.supabase.com/mcp",
+        "autoApprove": [
+          "list_projects",
+          "list_branches",
+          "list_tables",
+          "list_migrations",
+          "list_edge_functions",
+          "get_edge_function",
+          "get_logs",
+          "get_publishable_keys"
+        ]
+      }
+    }
+  }
+}

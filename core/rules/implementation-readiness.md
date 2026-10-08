@@ -60,7 +60,7 @@ plan started in one IDE can be finished in another.
 ## tasks.md structure (full specs)
 
 `tasks.md` needs a `## Notes` section (non-obvious decisions, what can be skipped) and a
-`## Task Dependency Graph` section. The spec-gap-check hook reports either when it is missing.
+`## Task Dependency Graph` section. The spec-gap-check hook (Kiro only) reports either when it is missing.
 Most older specs lack the graph; bring one up to standard when you next work in it rather than
 backfilling all of them at once.
 

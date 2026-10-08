@@ -79,8 +79,8 @@ if: github.ref == 'refs/heads/staging' || (github.event_name == 'pull_request' &
 ```
 So a green PR into the development branch has run type checks, unit tests, and Worker Playwright.
 
-**Skipping CI.** Put `[skip ci]` in the commit message (`[ci skip]`, `[no ci]`, and
-`[skip actions]` work too). GitHub skips `push` / `pull_request` workflows when the
+**Skipping CI.** Put `[skip ci]` in the commit message (`[ci skip]`, `[no ci]`,
+`[skip actions]` and `[actions skip]` work too). GitHub skips `push` / `pull_request` workflows when the
 **tip commit** of that push (or the PR HEAD) contains the token — every matching
 workflow, including deploys and changelog, not just tests.
 
@@ -124,9 +124,9 @@ the dashboard, which CI never opens, and `studio` is the largest image to pull:
 
 ## Deploy pitfalls
 
-**Build first, publish last.** Build the frontend bundle before touching the database, push
-migrations and functions next, and publish the frontend only after that, so the UI never
-reaches users before the schema it depends on.
+**Publish last.** Build the frontend bundle in parallel with the database deploy (pushing
+migrations and functions), and make the publish job `needs:` both, so the UI never reaches
+users before the schema it depends on while wall time stays at the slower of the two.
 
 **Pin the Supabase CLI to one version everywhere** — the `supabase` package in `package.json`,
 every CI job and every deploy workflow — and bump them together. A deploy on `latest` changes

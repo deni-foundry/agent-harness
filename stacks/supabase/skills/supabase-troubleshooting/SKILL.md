@@ -23,8 +23,8 @@ npx supabase start
 # Reset database completely
 npx supabase db reset
 
-# Check migration status
-npx supabase migration list
+# Check migration status of the local database
+npx supabase migration list --local
 ```
 
 ## Stale Generated Types
