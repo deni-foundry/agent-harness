@@ -12,7 +12,8 @@ core/            rulesync source tree for every project: rules/, skills/, subage
 stacks/<name>/   one rulesync source tree per technology (supabase, react-vite, …);
                  a project picks the stacks it uses
 hooks/           the scripts core/hooks.jsonc runs, one adapter folder per IDE
-test/            node --test suites for the hook scripts
+bin/, lib/       the `agent-harness sync` command
+test/            node --test suites for the hook scripts and the sync
 ```
 
 Stacks: `supabase` (patterns, hosted-database safety, MCP, troubleshooting), `github-actions`
@@ -22,31 +23,40 @@ bundle, troubleshooting).
 
 ## Using it in a project
 
-1. Install a tag as a dev dependency, plus rulesync pinned to an exact version:
+1. Install a tag as an **optional** dependency, plus rulesync pinned to an exact version as a
+   dev dependency:
 
    ```bash
-   npm i -D github:deni-foundry/agent-harness#v0.1.0 rulesync@28.0.0
+   npm i -O github:deni-foundry/agent-harness#v0.3.0
+   npm i -D -E rulesync@28.0.0
    ```
+
+   The repository is private, so every `npm ci` has to fetch it. As an optional dependency, a
+   job without access to it (a deploy, say) skips it with a warning instead of failing; only
+   the job that runs `rules:check` needs access (see CI below).
 
 2. Add `rulesync.jsonc`:
 
    ```jsonc
    {
-     "targets": ["claudecode", "cursor", "kiro-ide"],
+     "targets": ["claudecode", "cursor", "kiro-ide", "kiro-cli"],
      "features": ["rules", "skills", "subagents", "hooks", "mcp"],
      "delete": true
    }
    ```
 
-3. Add the scripts. Later input roots override earlier ones file by file, so the project
-   comes last:
+3. Add the scripts:
 
    ```json
-   "rules:sync": "rulesync generate --input-roots node_modules/@deni-foundry/agent-harness/core node_modules/@deni-foundry/agent-harness/stacks/<name> .rulesync",
-   "rules:check": "rulesync generate --check --input-roots <same roots>"
+   "rules:sync": "agent-harness sync",
+   "rules:check": "agent-harness sync --check"
    ```
 
-   Run `rules:check` in CI.
+   `agent-harness sync` reads `.rulesync/harness.json`, checks every source (below), writes
+   the derived files into `node_modules/.cache/agent-harness/`, then runs `rulesync generate`
+   with the input roots in order: harness `core`, the project's stacks, the derived files,
+   the project's `.rulesync`. Extra arguments go to `rulesync generate` (`--dry-run`,
+   `--targets claudecode`, …). `--check` writes nothing and exits 1 when an output is stale.
 
 4. Mark the generated paths LF in `.gitattributes`. On a CRLF checkout `--check` otherwise
    reports `.mdc` files as stale:
@@ -58,10 +68,12 @@ bundle, troubleshooting).
    .mcp.json text eol=lf
    ```
 
-5. Optionally tune the hooks in `.rulesync/harness.json`:
+5. Configure it in `.rulesync/harness.json`. Every field is optional:
 
    ```json
    {
+     "stacks": ["supabase", "react-vite"],
+     "overrides": [],
      "syncCommand": "npm run rules:sync",
      "review": {
        "watch": ["src", "supabase"],
@@ -75,12 +87,47 @@ bundle, troubleshooting).
    }
    ```
 
-   `review` drives the end-of-turn review: which changed files trigger it and the
-   project-specific checks it asks for after the universal completeness check.
-   `generated.extraPaths` adds files or directories (trailing `/`) to the edit guard.
+   `stacks` picks the stack trees to include. `overrides` lists project sources that replace a
+   harness file of the same name on purpose (`"rules/workflow"`); any other clash stops the
+   sync, because rulesync would silently keep only the later file. `review` drives the
+   end-of-turn review: which changed files trigger it and the project-specific checks it asks
+   for after the universal completeness check. `generated.extraPaths` adds files or
+   directories (trailing `/`) to the edit guard.
 
 The hooks run from `node_modules`, so they need `npm install` to have run in that checkout,
 including a fresh worktree.
+
+### What the sync adds
+
+- **Checks** before anything is written: every source starts with its `> Source:` line, a
+  skill's `name` equals its folder, every source has a `description`, and no name is defined
+  twice except as a declared override.
+- **Kiro rules for user-only workflows.** Kiro skills have no user-only flag, so for each skill
+  with `disable-model-invocation: true` the sync writes a `kiro-ide` rule with
+  `inclusion: manual` and the skill's body. The skill itself targets Claude Code and Cursor.
+- **`harness-index`**, an always-on rule listing the path-scoped rules, the skills the agent may
+  load and the workflows only the user starts, each with the first sentence of its
+  description. It replaces a hand-kept index, which goes stale as soon as a rule is added.
+
+`harness-index` and the user-only skills' names are reserved: a source rule may not use them.
+
+### CI
+
+Give the job that runs `rules:check` read access to this repository. A read-only
+[deploy key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys)
+fits best, because it belongs to no person and reaches only this repository: add its public
+half to this repository's deploy keys, store the private half as a secret in the project
+(e.g. `AGENT_HARNESS_DEPLOY_KEY`), and load it before `npm ci`:
+
+```yaml
+- uses: webfactory/ssh-agent@<pinned sha>
+  with:
+    ssh-private-key: ${{ secrets.AGENT_HARNESS_DEPLOY_KEY }}
+- run: npm ci
+- run: npm run rules:check
+```
+
+npm records GitHub dependencies as `git+ssh://` URLs in the lockfile, so the key is used as is.
 
 ## Writing sources
 
@@ -90,9 +137,7 @@ including a fresh worktree.
 - **No `root: true` rule**: it makes Kiro write an `AGENTS.md` listing `.kiro/steering`
   paths, which Cursor also reads. rulesync warns that no root exists; that is expected.
 - **User-only workflow**: a skill with `disable-model-invocation: true` and
-  `targets: ["claudecode", "cursor"]`, plus a `kiro-ide`-only rule with
-  `kiro: { inclusion: manual }` and the same body. Kiro skills have no user-only flag, so a
-  Kiro skill would let the agent run the workflow on its own.
+  `targets: ["claudecode", "cursor"]`. The sync derives its Kiro rule; do not write one.
 - **Source line**: start every body with
   `> Source: <where this file lives>. Edit it there; this copy is generated.` Claude strips
   HTML comments, so a comment banner never reaches the agent.
@@ -132,7 +177,7 @@ The working-method rules differ by IDE because the models differ, not the projec
 | `kiro/spec-alignment-check.mjs`   | Kiro        | stop                | Asks for a requirements/design/tasks check of new specs |
 
 All hooks are advisory except the edit guard, and every script fails open: an internal
-error never blocks the agent. `rulesync generate --check` in CI is the backstop.
+error never blocks the agent. `rules:check` in CI is the backstop.
 
 ## Releasing
 

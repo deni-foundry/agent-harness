@@ -43,14 +43,14 @@ into the workflow.
 A shape that works: `checks`, `lint`, `unit-tests` and `worker-e2e` run on every trigger; the two
 Supabase jobs run for the staging branch only:
 
-| Job                     | Runs on                        | What                                                                      |
-|-------------------------|--------------------------------|---------------------------------------------------------------------------|
-| `checks`                | every push/PR                  | All `tsc` configs and generated-artifact drift guards                     |
-| `lint`                  | every push/PR                  | `eslint` with a content-keyed cache                                       |
-| `unit-tests` (2 shards) | every push/PR                  | `vitest --run --shard=N/2 --maxWorkers=2`                                 |
-| `worker-e2e`            | every push/PR                  | Production build + Playwright against `wrangler dev`                      |
-| `integration-tests`     | staging pushes + PRs → staging | `npm run test:integration` against a real local Supabase                  |
-| `e2e-tests` (2 shards)  | staging pushes + PRs → staging | Playwright (Chromium) against the production build, `--shard=N/2`         |
+| Job                     | Runs on                        | What                                                              |
+|-------------------------|--------------------------------|-------------------------------------------------------------------|
+| `checks`                | every push/PR                  | All `tsc` configs and generated-artifact drift guards             |
+| `lint`                  | every push/PR                  | `eslint` with a content-keyed cache                               |
+| `unit-tests` (2 shards) | every push/PR                  | `vitest --run --shard=N/2 --maxWorkers=2`                         |
+| `worker-e2e`            | every push/PR                  | Production build + Playwright against `wrangler dev`              |
+| `integration-tests`     | staging pushes + PRs → staging | `npm run test:integration` against a real local Supabase          |
+| `e2e-tests` (2 shards)  | staging pushes + PRs → staging | Playwright (Chromium) against the production build, `--shard=N/2` |
 
 **Why this shape.** In a private repository `ubuntu-latest` is a 2-vCPU runner.
 Vitest defaults to CPUs − 1 workers, which is one worker there — hence `--maxWorkers=2`.
@@ -68,6 +68,13 @@ runner is discarded, and stopping cost ~20 s per job.
 
 **Playwright installs the headless shell only** (`--only-shell`). Every CI config runs headless,
 which uses `chromium-headless-shell`, so the full Chromium download was unused.
+
+**No `--with-deps`; pin the runner image.** The GitHub-hosted Ubuntu image already has every
+library Chromium needs; `--with-deps` only apt-installs fonts that tests do not use, and a slow
+Ubuntu mirror once stretched that step to almost 8 minutes while the browser download took ~3 s.
+Pin Playwright jobs to `runs-on: ubuntu-24.04` rather than `ubuntu-latest`, so a runner-image
+upgrade cannot drop a library unnoticed. If one does go missing, the browser fails to launch and
+the job fails loudly; add `--with-deps` back for that job then.
 
 **`concurrency`.** The CI workflow cancels an in-progress run when a newer push lands on the same
 branch or PR. Deploy workflows serialize instead (`cancel-in-progress: false`): a second push
