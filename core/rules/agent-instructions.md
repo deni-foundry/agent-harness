@@ -16,6 +16,9 @@ every project gets. The copies in `.claude/`, `.cursor/`, `.kiro/` and `.mcp.jso
 - **To add or change** a rule, skill, subagent or MCP server, edit `.rulesync/` (or the
   agent-harness repo when every project should get it), then run `npm run rules:sync`. Every
   source starts with its `> Source:` line; the harness README, "Writing sources", has the format.
+- **To see or choose what the harness provides**, run `npx agent-harness list`; turn stacks on
+  with `stacks` and leave harness items out with `exclude` in `.rulesync/harness.json`.
+  `npx agent-harness help` explains every command.
 - **Never create or edit generated files**: `.claude/rules|skills|agents`, `.cursor/rules|skills|agents`,
   `.cursor/mcp.json`, `.cursor/hooks.json`, `.kiro/steering|skills|agents`, `.kiro/hooks/rulesync.json`,
   `.kiro/settings/mcp.json`, `.mcp.json` and `CLAUDE.md`. The edit guard blocks it, the pre-commit

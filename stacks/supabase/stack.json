@@ -1,0 +1,3 @@
+{
+  "description": "Supabase: migrations and grants, RLS, Edge Functions, calling functions from Postgres, hosted-database safety, the Supabase MCP servers and troubleshooting"
+}

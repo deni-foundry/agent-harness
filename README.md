@@ -4,16 +4,77 @@ Shared agent instructions, skills, subagents and hooks for Claude Code, Cursor a
 Each project installs a tagged version and generates every IDE's files with
 [rulesync](https://github.com/dyoshikawa/rulesync), layering its own `.rulesync/` on top.
 
+## Quick start
+
+In a project with a `package.json` (Node 22 or later):
+
+```bash
+npx github:deni-foundry/agent-harness#v0.6.0 init
+```
+
+`init` asks which stacks the project uses, then sets everything up: the harness and rulesync
+as dev dependencies, the `rules:sync`, `rules:check` and `prepare` scripts, `rulesync.jsonc`,
+the `.gitattributes` lines and `.rulesync/harness.json`. Agent files the project already has
+(`CLAUDE.md`, rules and skills in `.claude/`, `.cursor/` or `.kiro/`) move into `.rulesync/`
+first, so the first sync keeps them. It then runs `npm install` and that first sync. Running
+it again only adds what is missing.
+
+Flags: `--stacks supabase,react-vite` answers the question up front (and is how to run it
+without a terminal prompt), `--targets` picks the IDEs (default
+`claudecode,cursor,kiro-ide,kiro-cli`), `--no-adopt` leaves existing agent files alone, and
+`--no-install` stops before `npm install`.
+
+Commit the result, then add `npm run rules:check` to CI (see [CI](#ci)).
+
+## Commands
+
+Once installed, run them with `npx agent-harness <command>`; `npx agent-harness help` prints
+this list. This README ships with the package, in
+`node_modules/@deni-foundry/agent-harness/README.md`.
+
+| Command                        | Does                                                                                                 |
+|--------------------------------|------------------------------------------------------------------------------------------------------|
+| `init`                         | Sets a project up (above)                                                                            |
+| `list`                         | Every rule, skill, subagent and stack, and whether this project has it on, off, excluded or replaced |
+| `sync` (`npm run rules:sync`)  | Generates every IDE's files from the harness and `.rulesync/`                                        |
+| `sync --check` (`rules:check`) | Writes nothing; fails when a generated file is stale                                                 |
+| `sync --force`                 | Syncs even when that discards files no source produced                                               |
+| `adopt [--only] <path...>`     | Moves a rule, skill or subagent from an IDE folder into `.rulesync/`, then syncs                     |
+| `precommit`                    | The pre-commit check: adopts stray files, then runs the check                                        |
+| `install-hooks`                | Installs the pre-commit check into git (`npm install` runs it through `prepare`)                     |
+| `help`                         | Prints the commands                                                                                  |
+
+## Choosing what a project gets
+
+A project gets three layers, later ones on top: harness **core** (every project), the
+**stacks** it turns on, and its own **`.rulesync/`**. `npx agent-harness list` shows all three
+with each item's state, so choosing never means reading this repository.
+
+- **A stack** bundles the rules, skills and MCP servers for one technology. Turn it on in
+  `"stacks"`; it is all or nothing, and anything in it you do not want goes in `"exclude"`.
+- **`"exclude"`** leaves a core or stack item out of every IDE, written as
+  `rules/<name>`, `skills/<name>` or `subagents/<name>` (the keys `list` prints). Excluding a
+  user-only skill also drops its derived Kiro rule, and the index rule stops listing it. An
+  item that does not exist, or whose stack is off, stops the sync rather than being ignored.
+  `rules/agent-instructions` cannot be excluded: it is what tells every agent where
+  instructions live.
+- **Replacing** an item: write your own with the same name in `.rulesync/` and add it to
+  `"overrides"`. `list` then shows the harness one as "replaced by the project".
+- **Adding** your own: put it in `.rulesync/rules/`, `skills/` or `subagents/`.
+
+After any change, `npm run rules:sync`. When every project should change, change the harness
+instead, release a version and move the projects to it.
+
 ## Layout
 
 ```
 core/            rulesync source tree for every project: rules/, skills/, subagents/,
                  hooks.jsonc, mcp.jsonc
-stacks/<name>/   one rulesync source tree per technology (supabase, react-vite, …);
-                 a project picks the stacks it uses
+stacks/<name>/   one rulesync source tree per technology (supabase, react-vite, …), with a
+                 stack.json description; a project picks the stacks it uses
 hooks/           the scripts core/hooks.jsonc runs, one adapter folder per IDE
-bin/, lib/       the `agent-harness sync` command
-test/            node --test suites for the hook scripts and the sync
+bin/, lib/       the `agent-harness` command
+test/            node --test suites for the hook scripts, the sync and the commands
 ```
 
 Stacks: `supabase` (patterns, hosted-database safety, MCP, troubleshooting), `github-actions`
@@ -21,12 +82,14 @@ Stacks: `supabase` (patterns, hosted-database safety, MCP, troubleshooting), `gi
 `framer-motion`, `react-vite` (lazy routes, caching, load and error states, the global Sass
 bundle, troubleshooting).
 
-## Using it in a project
+## Setting it up by hand
+
+What `init` does, step by step, for a project that needs to differ:
 
 1. Install a tag as a dev dependency, plus rulesync pinned to an exact version:
 
    ```bash
-   npm i -D github:deni-foundry/agent-harness#v0.3.0
+   npm i -D github:deni-foundry/agent-harness#v0.6.0
    npm i -D -E rulesync@28.0.0
    ```
 
@@ -60,10 +123,12 @@ bundle, troubleshooting).
    `prepare` installs the pre-commit check on every `npm install` (see "Keeping the sources
    the only source").
 
-4. Mark the generated paths LF in `.gitattributes`. On a CRLF checkout `--check` otherwise
-   reports `.mdc` files as stale:
+4. Mark the sources and generated paths LF in `.gitattributes`. On a CRLF checkout `--check`
+   otherwise reports `.mdc` files as stale:
 
    ```
+   .rulesync/** text eol=lf
+   rulesync.jsonc text eol=lf
    .claude/** text eol=lf
    .cursor/** text eol=lf
    .kiro/** text eol=lf
@@ -75,6 +140,7 @@ bundle, troubleshooting).
    ```json
    {
      "stacks": ["supabase", "react-vite"],
+     "exclude": ["skills/frontend-design"],
      "overrides": [],
      "syncCommand": "npm run rules:sync",
      "review": {
@@ -90,9 +156,10 @@ bundle, troubleshooting).
    }
    ```
 
-   `stacks` picks the stack trees to include. `overrides` lists project sources that replace a
-   harness file of the same name on purpose (`"rules/workflow"`); any other clash stops the
-   sync, because rulesync would silently keep only the later file. `review` drives the
+   `stacks` picks the stack trees to include and `exclude` leaves harness items out (see
+   "Choosing what a project gets"). `overrides` lists project sources that replace a harness
+   file of the same name on purpose (`"rules/workflow"`); any other clash stops the sync,
+   because rulesync would silently keep only the later file. `review` drives the
    end-of-turn review: which changed files trigger it and the project-specific checks it asks
    for after the universal completeness check. `generated.extraPaths` adds files or
    directories (trailing `/`) to the edit guard. `adopt.auto: false` turns automatic adoption
@@ -220,5 +287,6 @@ into `.rulesync/`. Every script fails open: an internal error never blocks the a
 
 ## Releasing
 
-Run `npm test`, bump `version` in `package.json`, tag `vX.Y.Z` and push the tag. Projects
-move by changing the tag in their `package.json`.
+Run `npm test`, bump `version` in `package.json` and the version in the quick start and
+manual install above, tag `vX.Y.Z` and push the tag. Projects move by changing the tag in
+their `package.json`, then running `npm install` and `npm run rules:sync`.

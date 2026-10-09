@@ -1,0 +1,3 @@
+{
+  "description": "GitHub Actions CI for a Supabase and Vite/Playwright app: job shape, local Supabase in CI, gating deploys on CI, Cloudflare and Supabase deploy pitfalls"
+}
