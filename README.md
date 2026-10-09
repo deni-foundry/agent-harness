@@ -23,17 +23,16 @@ bundle, troubleshooting).
 
 ## Using it in a project
 
-1. Install a tag as an **optional** dependency, plus rulesync pinned to an exact version as a
-   dev dependency:
+1. Install a tag as a dev dependency, plus rulesync pinned to an exact version:
 
    ```bash
-   npm i -O github:deni-foundry/agent-harness#v0.3.0
+   npm i -D github:deni-foundry/agent-harness#v0.3.0
    npm i -D -E rulesync@28.0.0
    ```
 
-   The repository is private, so every `npm ci` has to fetch it. As an optional dependency, a
-   job without access to it (a deploy, say) skips it with a warning instead of failing; only
-   the job that runs `rules:check` needs access (see CI below).
+   The repository is public, so installing it needs no GitHub credentials, in CI or anywhere
+   else. The lockfile records it as a `git+ssh://` URL, but npm downloads public GitHub
+   dependencies over HTTPS, so a runner without an SSH key installs it too.
 
 2. Add `rulesync.jsonc`:
 
@@ -113,21 +112,12 @@ including a fresh worktree.
 
 ### CI
 
-Give the job that runs `rules:check` read access to this repository. A read-only
-[deploy key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys)
-fits best, because it belongs to no person and reaches only this repository: add its public
-half to this repository's deploy keys, store the private half as a secret in the project
-(e.g. `AGENT_HARNESS_DEPLOY_KEY`), and load it before `npm ci`:
+Run `rules:check` after `npm ci` in a job that gates the build:
 
 ```yaml
-- uses: webfactory/ssh-agent@<pinned sha>
-  with:
-    ssh-private-key: ${{ secrets.AGENT_HARNESS_DEPLOY_KEY }}
 - run: npm ci
 - run: npm run rules:check
 ```
-
-npm records GitHub dependencies as `git+ssh://` URLs in the lockfile, so the key is used as is.
 
 ## Writing sources
 
