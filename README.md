@@ -85,7 +85,8 @@ bundle, troubleshooting).
          { "match": "supabase/migrations/[^/]+\\.sql$", "checks": ["Seed and reset scripts match the migration."] }
        ]
      },
-     "generated": { "extraPaths": [] }
+     "generated": { "extraPaths": [] },
+     "adopt": { "auto": true, "targets": "all" }
    }
    ```
 
@@ -94,7 +95,8 @@ bundle, troubleshooting).
    sync, because rulesync would silently keep only the later file. `review` drives the
    end-of-turn review: which changed files trigger it and the project-specific checks it asks
    for after the universal completeness check. `generated.extraPaths` adds files or
-   directories (trailing `/`) to the edit guard.
+   directories (trailing `/`) to the edit guard. `adopt.auto: false` turns automatic adoption
+   off; `adopt.targets: "origin"` keeps an adopted file for the IDE it came from.
 
 The hooks run from `node_modules`, so they need `npm install` to have run in that checkout,
 including a fresh worktree.
@@ -115,15 +117,16 @@ including a fresh worktree.
 
 ### Keeping the sources the only source
 
-Generation is one-way: the sources produce the IDE folders, never the reverse. Four things keep
+Generation is one-way: the sources produce the IDE folders, never the reverse. Five things keep
 it that way, so a change made in an IDE folder is never silently lost or left behind:
 
-| Layer                                            | Catches                                                                                      | Does                                                                            |
-|--------------------------------------------------|----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
-| `agent-instructions` rule (always on, every IDE) | an agent that does not know where instructions live                                          | tells it to edit `.rulesync/` or the harness, and to adopt files from elsewhere |
-| Edit guard hook                                  | an agent writing a generated file with its edit tools                                        | blocks the write and names the source                                           |
-| Sync protection                                  | a sync about to overwrite or delete a hand edit, an installed skill or a rule made in an IDE | refuses and lists the files; `--force` discards them                            |
-| Pre-commit check and CI `rules:check`            | anything that slipped through, including writes by people, shells and installers             | stops the commit or the build until the files match their sources               |
+| Layer                                            | Catches                                                                                              | Does                                                                                            |
+|--------------------------------------------------|------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| `agent-instructions` rule (always on, every IDE) | an agent that does not know where instructions live                                                  | tells it to edit `.rulesync/` or the harness, and to adopt files from elsewhere                 |
+| Edit guard hook                                  | an agent writing a generated file with its edit tools                                                | blocks the write and names the source                                                           |
+| Sync protection                                  | a sync about to overwrite or delete a hand edit, an installed skill or a rule made in an IDE         | refuses and lists the files; `--force` discards them                                            |
+| Automatic adoption                               | a new rule, skill or subagent in an IDE folder (downloaded, or made with an IDE's "new rule" button) | at session start, after each turn and at commit, moves it into `.rulesync/` and syncs every IDE |
+| Pre-commit check and CI `rules:check`            | anything that slipped through, including writes by people, shells and installers                     | stops the commit or the build until the files match their sources                               |
 
 The sync protection asks rulesync for a dry run first. A file it would change is safe when it
 matches the last commit or what the previous sync wrote (hashes in
@@ -134,7 +137,20 @@ To keep such a file, adopt it. `agent-harness adopt <path...>` converts a rule, 
 subagent from `.claude/`, `.cursor/` or `.kiro/` with `rulesync import`, writes it to `.rulesync/`
 with its `> Source:` line (and a description if it had none), deletes the IDE copy and syncs.
 It targets every IDE unless `--only` keeps it for the IDE it came from. A name that already
-exists in `.rulesync/` is refused rather than overwritten.
+exists in `.rulesync/` is refused rather than overwritten. A rule that was always-on where it
+came from also gets Cursor's `alwaysApply`, which `rulesync import` leaves out.
+
+Automatic adoption runs the same conversion for every new file it finds: untracked or newly
+added in git, in a generated folder, and not a name any source produces (so generated output
+that is simply not committed yet is never mistaken for one). It runs from the `auto-adopt`
+hook at session start and after each turn in all three IDEs, and from the pre-commit check.
+Claude Code shows you what was adopted and tells the agent at session start; Kiro adds it to
+the agent's context; Cursor shows it as file changes, because a stop reply there would start
+another agent turn. At commit, the adoption is staged into the commit when that commit touches
+agent files, and left unstaged otherwise. Edits to generated files are never adopted, only
+reported at session start, because their source may be in the harness and an IDE's format does
+not map back cleanly. Only files inside the project are seen; a skill installed into a user
+folder (for example `~/.claude`) is not.
 
 The pre-commit hook lives in git's hooks folder, which every worktree shares. `install-hooks`
 writes it only when the slot is free or already ours, skips CI, and never fails `npm install`.
@@ -188,17 +204,19 @@ The working-method rules differ by IDE because the models differ, not the projec
 
 ## Hooks
 
-| Script                            | IDE         | Event             | Does                                                    |
-|-----------------------------------|-------------|-------------------|---------------------------------------------------------|
-| `edit-guard.mjs <ide>`            | all three   | pre tool use      | Blocks edits to generated files, names the source       |
-| `claude/record-changed-files.mjs` | Claude Code | pre/post tool use | Records files changed this turn                         |
-| `cursor/record-changed-files.mjs` | Cursor      | post tool use     | Records files changed this turn                         |
-| `*/end-of-turn-review.mjs`        | all three   | stop              | One review of the turn's code changes, silent otherwise |
-| `kiro/spec-gap-check.mjs`         | Kiro        | stop              | Reports a spec `tasks.md` missing required sections     |
-| `kiro/spec-alignment-check.mjs`   | Kiro        | stop              | Asks for a requirements/design/tasks check of new specs |
+| Script                            | IDE         | Event               | Does                                                    |
+|-----------------------------------|-------------|---------------------|---------------------------------------------------------|
+| `edit-guard.mjs <ide>`            | all three   | pre tool use        | Blocks edits to generated files, names the source       |
+| `claude/record-changed-files.mjs` | Claude Code | pre/post tool use   | Records files changed this turn                         |
+| `cursor/record-changed-files.mjs` | Cursor      | post tool use       | Records files changed this turn                         |
+| `*/end-of-turn-review.mjs`        | all three   | stop                | One review of the turn's code changes, silent otherwise |
+| `kiro/spec-gap-check.mjs`         | Kiro        | stop                | Reports a spec `tasks.md` missing required sections     |
+| `kiro/spec-alignment-check.mjs`   | Kiro        | stop                | Asks for a requirements/design/tasks check of new specs |
+| `auto-adopt.mjs <ide> <event>`    | all three   | session start, stop | Adopts new rules and skills found only in an IDE folder |
 
-All hooks are advisory except the edit guard, and every script fails open: an internal
-error never blocks the agent. `rules:check` in CI is the backstop.
+All hooks are advisory except the edit guard, which blocks, and `auto-adopt`, which moves files
+into `.rulesync/`. Every script fails open: an internal error never blocks the agent.
+`rules:check` in CI is the backstop.
 
 ## Releasing
 

@@ -8,13 +8,15 @@
  *   Moves a rule, skill or subagent that exists only in an IDE folder into `.rulesync/`,
  *   then syncs. `--only` keeps it for the IDE it came from instead of every IDE.
  * agent-harness precommit
- *   The git pre-commit check: runs `sync --check` when staged files touch agent files.
+ *   The git pre-commit check: adopts new rules and skills found only in an IDE folder, then
+ *   runs `sync --check` when staged files touch agent files.
  * agent-harness install-hooks
  *   Installs that pre-commit hook; meant for the project's npm `prepare` script.
  */
 
 import { adopt } from '../lib/adopt.mjs';
-import { installHooks, PRECOMMIT_HELP, stagedPaths, touchesAgentFiles } from '../lib/git-hooks.mjs';
+import { autoAdopt, describeResult } from '../lib/auto-adopt.mjs';
+import { installHooks, PRECOMMIT_HELP, stagedPaths, stageAdopted, touchesAgentFiles } from '../lib/git-hooks.mjs';
 import { rulesyncCli, sync } from '../lib/sync.mjs';
 
 const USAGE = `Usage:
@@ -63,6 +65,21 @@ function run() {
         staged = stagedPaths(projectDir);
       } catch {
         return 0; // not a git repository: nothing to check
+      }
+      // Adopt new rules and skills found only in an IDE folder before checking.
+      const adoption = autoAdopt(projectDir);
+      if (adoption.adopted.length > 0) {
+        const intoThisCommit = touchesAgentFiles(staged);
+        if (intoThisCommit) stageAdopted(projectDir, adoption.adopted);
+        console.error(
+          `${describeResult({ ...adoption, edits: [] })}\n` +
+            (intoThisCommit
+              ? 'Staged into this commit.'
+              : 'Not staged: this commit does not touch agent files, so commit the adoption on its own.'),
+        );
+        staged = stagedPaths(projectDir);
+      } else if (adoption.problems.length > 0) {
+        console.error(describeResult(adoption));
       }
       if (!touchesAgentFiles(staged)) return 0;
       const status = sync({ projectDir, check: true });

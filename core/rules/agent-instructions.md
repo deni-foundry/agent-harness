@@ -21,8 +21,10 @@ every project gets. The copies in `.claude/`, `.cursor/`, `.kiro/` and `.mcp.jso
   `.kiro/settings/mcp.json`, `.mcp.json` and `CLAUDE.md`. The edit guard blocks it, the pre-commit
   check and CI reject it, and the next sync would overwrite it.
 - **A rule or skill from elsewhere** (a downloaded skill, a rule made with an IDE's "new rule"
-  button): move it into `.rulesync/` with `npx agent-harness adopt <path>` rather than leaving it
-  in an IDE folder, where only one IDE sees it and a sync refuses to run until it is adopted.
+  button) is adopted into `.rulesync/` automatically at session start, after each turn and at
+  commit, then synced to every IDE; review it there and commit it, or delete it from
+  `.rulesync/` if it was only an experiment. `npx agent-harness adopt <path>` does the same by
+  hand. An edit to a generated file is never adopted: carry it over to its source.
 - **Written by hand or by other tools, not generated**: `AGENTS.md` (blocks owned by the tools
   that write them, such as Groma and Backlog.md; change those through their CLIs), the keys of
   `.claude/settings.json` other than `hooks`, `.claude/settings.local.json`, and the plan and spec

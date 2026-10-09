@@ -156,3 +156,66 @@ describe('adopt', () => {
     }
   });
 });
+
+describe('auto-adopt', () => {
+  let dir;
+  const cli = rulesyncCli(HARNESS_ROOT);
+  beforeEach(() => {
+    dir = gitRepo();
+    write(dir, 'rulesync.jsonc', '{"targets":["claudecode","cursor"],"features":["skills"],"delete":true}\n');
+    write(dir, 'README.md', 'project\n');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', 'init');
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('finds new units, and reports edits and extra files in produced names instead', async () => {
+    const { findStrays } = await import('../lib/auto-adopt.mjs');
+    write(dir, '.claude/skills/downloaded/SKILL.md', '---\nname: downloaded\ndescription: New\n---\n\nBody.\n');
+    write(dir, '.claude/skills/tasks-to-tdd/extra.md', 'added by hand to a harness skill\n');
+    const { units, edits } = findStrays(dir);
+    assert.deepEqual(units.map((u) => u.unit), ['.claude/skills/downloaded']);
+    assert.deepEqual(edits, ['.claude/skills/tasks-to-tdd/extra.md']);
+  });
+
+  it('adopts a downloaded skill, syncs every IDE and can stage the result', { skip: cli ? false : 'rulesync not installed' }, async () => {
+    const { autoAdopt, describeResult } = await import('../lib/auto-adopt.mjs');
+    const { stageAdopted } = await import('../lib/git-hooks.mjs');
+    write(dir, '.claude/skills/downloaded/SKILL.md', '---\nname: downloaded\ndescription: New\n---\n\nBody.\n');
+    git(dir, 'add', '-A');
+    const result = autoAdopt(dir);
+    assert.deepEqual(result.problems, []);
+    assert.equal(result.synced, true);
+    assert.deepEqual(result.adopted[0].to, ['.rulesync/skills/downloaded/SKILL.md']);
+    assert.match(readFileSync(join(dir, '.claude/skills/downloaded/SKILL.md'), 'utf8'), /> Source: `\.rulesync\/skills\/downloaded\/SKILL\.md`/);
+    assert.ok(existsSync(join(dir, '.cursor/skills/downloaded/SKILL.md')));
+    assert.match(describeResult(result), /Every IDE now has it/);
+
+    stageAdopted(dir, result.adopted);
+    const staged = git(dir, 'diff', '--cached', '--name-only').trim().split('\n');
+    for (const p of ['.rulesync/skills/downloaded/SKILL.md', '.claude/skills/downloaded/SKILL.md', '.cursor/skills/downloaded/SKILL.md']) {
+      assert.ok(staged.includes(p), p);
+    }
+    // Now generated output: nothing left to adopt.
+    assert.deepEqual(autoAdopt(dir).adopted, []);
+  });
+
+  it('does nothing when "adopt.auto" is false', async () => {
+    const { autoAdopt } = await import('../lib/auto-adopt.mjs');
+    write(dir, '.rulesync/harness.json', '{"adopt":{"auto":false}}\n');
+    write(dir, '.claude/skills/downloaded/SKILL.md', '---\nname: downloaded\ndescription: New\n---\n\nBody.\n');
+    assert.deepEqual(autoAdopt(dir).adopted, []);
+    assert.ok(existsSync(join(dir, '.claude/skills/downloaded/SKILL.md')));
+  });
+});
+
+describe('adopt keeps a rule always-on in Cursor', () => {
+  const always = (front) => /alwaysApply: true/.test(finishSource(`---\n${front}\n---\nBody.\n`, '.rulesync/rules/r.md', { fallbackName: 'r', feature: 'rules' }).text);
+  it('adds alwaysApply for always-on rules only', () => {
+    assert.equal(always("root: false\ntargets:\n  - '*'\nglobs: []\nkiro:\n  inclusion: always"), true);
+    assert.equal(always("root: false\ntargets:\n  - '*'\ndescription: Claude rule"), true);
+    assert.equal(always("root: false\ndescription: Manual\nkiro:\n  inclusion: manual"), false);
+    assert.equal(always("root: false\ndescription: Scoped\nglobs:\n  - src/**"), false);
+    assert.equal(always("root: false\ndescription: On request\ncursor:\n  alwaysApply: false"), false);
+  });
+});
