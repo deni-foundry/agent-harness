@@ -1,6 +1,6 @@
 {
   "name": "@deni-foundry/agent-harness",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Shared agent rules, skills and hooks for Claude Code, Cursor and Kiro, generated into each project with rulesync.",
   "type": "module",
@@ -20,6 +20,9 @@
   },
   "peerDependencies": {
     "rulesync": "^28.0.0"
+  },
+  "devDependencies": {
+    "rulesync": "28.0.0"
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\""

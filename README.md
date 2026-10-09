@@ -48,7 +48,8 @@ bundle, troubleshooting).
 
    ```json
    "rules:sync": "agent-harness sync",
-   "rules:check": "agent-harness sync --check"
+   "rules:check": "agent-harness sync --check",
+   "prepare": "agent-harness install-hooks"
    ```
 
    `agent-harness sync` reads `.rulesync/harness.json`, checks every source (below), writes
@@ -56,6 +57,8 @@ bundle, troubleshooting).
    with the input roots in order: harness `core`, the project's stacks, the derived files,
    the project's `.rulesync`. Extra arguments go to `rulesync generate` (`--dry-run`,
    `--targets claudecode`, …). `--check` writes nothing and exits 1 when an output is stale.
+   `prepare` installs the pre-commit check on every `npm install` (see "Keeping the sources
+   the only source").
 
 4. Mark the generated paths LF in `.gitattributes`. On a CRLF checkout `--check` otherwise
    reports `.mdc` files as stale:
@@ -110,6 +113,34 @@ including a fresh worktree.
 
 `harness-index` and the user-only skills' names are reserved: a source rule may not use them.
 
+### Keeping the sources the only source
+
+Generation is one-way: the sources produce the IDE folders, never the reverse. Four things keep
+it that way, so a change made in an IDE folder is never silently lost or left behind:
+
+| Layer                                            | Catches                                                                                      | Does                                                                            |
+|--------------------------------------------------|----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| `agent-instructions` rule (always on, every IDE) | an agent that does not know where instructions live                                          | tells it to edit `.rulesync/` or the harness, and to adopt files from elsewhere |
+| Edit guard hook                                  | an agent writing a generated file with its edit tools                                        | blocks the write and names the source                                           |
+| Sync protection                                  | a sync about to overwrite or delete a hand edit, an installed skill or a rule made in an IDE | refuses and lists the files; `--force` discards them                            |
+| Pre-commit check and CI `rules:check`            | anything that slipped through, including writes by people, shells and installers             | stops the commit or the build until the files match their sources               |
+
+The sync protection asks rulesync for a dry run first. A file it would change is safe when it
+matches the last commit or what the previous sync wrote (hashes in
+`node_modules/.cache/agent-harness-state/`); anything else is unmanaged work.
+`.claude/settings.json` is exempt, because rulesync only merges its `hooks` key.
+
+To keep such a file, adopt it. `agent-harness adopt <path...>` converts a rule, skill or
+subagent from `.claude/`, `.cursor/` or `.kiro/` with `rulesync import`, writes it to `.rulesync/`
+with its `> Source:` line (and a description if it had none), deletes the IDE copy and syncs.
+It targets every IDE unless `--only` keeps it for the IDE it came from. A name that already
+exists in `.rulesync/` is refused rather than overwritten.
+
+The pre-commit hook lives in git's hooks folder, which every worktree shares. `install-hooks`
+writes it only when the slot is free or already ours, skips CI, and never fails `npm install`.
+The hook runs the check only when the commit touches agent files or their sources, and it
+compares the working tree, so unstaged changes count.
+
 ### CI
 
 Run `rules:check` after `npm ci` in a job that gates the build:
@@ -157,14 +188,14 @@ The working-method rules differ by IDE because the models differ, not the projec
 
 ## Hooks
 
-| Script                            | IDE         | Event               | Does                                                    |
-|-----------------------------------|-------------|---------------------|---------------------------------------------------------|
-| `edit-guard.mjs <ide>`            | all three   | pre tool use        | Blocks edits to generated files, names the source       |
-| `claude/record-changed-files.mjs` | Claude Code | pre/post tool use   | Records files changed this turn                         |
-| `cursor/record-changed-files.mjs` | Cursor      | post tool use       | Records files changed this turn                         |
-| `*/end-of-turn-review.mjs`        | all three   | stop                | One review of the turn's code changes, silent otherwise |
-| `kiro/spec-gap-check.mjs`         | Kiro        | stop                | Reports a spec `tasks.md` missing required sections     |
-| `kiro/spec-alignment-check.mjs`   | Kiro        | stop                | Asks for a requirements/design/tasks check of new specs |
+| Script                            | IDE         | Event             | Does                                                    |
+|-----------------------------------|-------------|-------------------|---------------------------------------------------------|
+| `edit-guard.mjs <ide>`            | all three   | pre tool use      | Blocks edits to generated files, names the source       |
+| `claude/record-changed-files.mjs` | Claude Code | pre/post tool use | Records files changed this turn                         |
+| `cursor/record-changed-files.mjs` | Cursor      | post tool use     | Records files changed this turn                         |
+| `*/end-of-turn-review.mjs`        | all three   | stop              | One review of the turn's code changes, silent otherwise |
+| `kiro/spec-gap-check.mjs`         | Kiro        | stop              | Reports a spec `tasks.md` missing required sections     |
+| `kiro/spec-alignment-check.mjs`   | Kiro        | stop              | Asks for a requirements/design/tasks check of new specs |
 
 All hooks are advisory except the edit guard, and every script fails open: an internal
 error never blocks the agent. `rules:check` in CI is the backstop.
